@@ -1,0 +1,572 @@
+<!DOCTYPE html>
+<html lang="sk">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HTML Screenshot - Stiahnuť časť ako obrázok</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #f5f5f5;
+        }
+
+        .container {
+            display: flex;
+            height: 100vh;
+            gap: 10px;
+            padding: 10px;
+        }
+
+        .panel {
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .controls-panel {
+            width: 300px;
+            padding: 20px;
+            border-right: 2px solid #e0e0e0;
+        }
+
+        .preview-panel {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            position: relative;
+        }
+
+        .controls-panel h2 {
+            color: #333;
+            margin-bottom: 20px;
+            font-size: 18px;
+        }
+
+        .control-group {
+            margin-bottom: 20px;
+        }
+
+        .control-group label {
+            display: block;
+            margin-bottom: 8px;
+            color: #555;
+            font-weight: 500;
+        }
+
+        .control-group input[type="file"],
+        .control-group textarea {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-family: monospace;
+            font-size: 12px;
+        }
+
+        .control-group textarea {
+            height: 150px;
+            resize: vertical;
+        }
+
+        button {
+            width: 100%;
+            padding: 12px;
+            margin-bottom: 10px;
+            border: none;
+            border-radius: 4px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+            font-size: 14px;
+        }
+
+        .btn-primary {
+            background: #4CAF50;
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: #45a049;
+        }
+
+        .btn-secondary {
+            background: #2196F3;
+            color: white;
+        }
+
+        .btn-secondary:hover {
+            background: #0b7dda;
+        }
+
+        .btn-warning {
+            background: #ff9800;
+            color: white;
+        }
+
+        .btn-warning:hover {
+            background: #e68900;
+        }
+
+        .btn-danger {
+            background: #f44336;
+            color: white;
+        }
+
+        .btn-danger:hover {
+            background: #da190b;
+        }
+
+        .btn-disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .status-info {
+            background: #e3f2fd;
+            border-left: 4px solid #2196F3;
+            padding: 12px;
+            border-radius: 4px;
+            margin-bottom: 15px;
+            font-size: 13px;
+            color: #1976d2;
+        }
+
+        .preview-frame {
+            flex: 1;
+            overflow: auto;
+            background: white;
+            position: relative;
+        }
+
+        #htmlPreview {
+            padding: 20px;
+            min-height: 100%;
+        }
+
+        .selection-overlay {
+            position: absolute;
+            border: 3px dashed #2196F3;
+            background: rgba(33, 150, 243, 0.1);
+            cursor: crosshair;
+            display: none;
+            pointer-events: none;
+            z-index: 1000;
+        }
+
+        .selection-info {
+            position: absolute;
+            background: #2196F3;
+            color: white;
+            padding: 5px 10px;
+            border-radius: 4px;
+            font-size: 12px;
+            pointer-events: none;
+            z-index: 1001;
+            display: none;
+        }
+
+        .mode-indicator {
+            background: #fff3e0;
+            border-left: 4px solid #ff9800;
+            padding: 12px;
+            border-radius: 4px;
+            margin-bottom: 15px;
+            font-size: 13px;
+            color: #e65100;
+            display: none;
+        }
+
+        .mode-indicator.active {
+            display: block;
+        }
+
+        .coords-display {
+            background: #f5f5f5;
+            padding: 10px;
+            border-radius: 4px;
+            font-size: 12px;
+            font-family: monospace;
+            color: #666;
+            margin-top: 10px;
+            display: none;
+        }
+
+        .coords-display.active {
+            display: block;
+        }
+
+        h3 {
+            font-size: 14px;
+            color: #555;
+            margin-top: 15px;
+            margin-bottom: 8px;
+        }
+
+        .option-buttons {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 10px;
+        }
+
+        .option-btn {
+            flex: 1;
+            padding: 8px;
+            font-size: 12px;
+        }
+
+        .option-btn.active {
+            background: #4CAF50 !important;
+            color: white;
+        }
+
+        .checkbox-group {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 10px;
+        }
+
+        .checkbox-group input[type="checkbox"] {
+            cursor: pointer;
+            width: 18px;
+            height: 18px;
+        }
+
+        .checkbox-group label {
+            margin: 0;
+            cursor: pointer;
+            font-weight: normal;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Kontrolný panel -->
+        <div class="panel controls-panel">
+            <h2>🖼️ Screenshot Nástroj</h2>
+
+            <div class="status-info" id="status">
+                Krok 1: Nahraj HTML súbor alebo vlož kód
+            </div>
+
+            <!-- Nahrávanie HTML -->
+            <div class="control-group">
+                <label>1️⃣ Nahraj HTML súbor:</label>
+                <input type="file" id="htmlFile" accept=".html,.htm">
+            </div>
+
+            <div style="text-align: center; color: #999; margin: 15px 0;">— alebo —</div>
+
+            <!-- HTML kód -->
+            <div class="control-group">
+                <label>2️⃣ Alebo vlož HTML kód:</label>
+                <textarea id="htmlCode" placeholder="&lt;!DOCTYPE html&gt;&#10;&lt;html&gt;&#10;..."></textarea>
+                <button class="btn-secondary" onclick="loadHtmlFromText()">Načítať kód</button>
+            </div>
+
+            <button class="btn-primary" onclick="resetHtml()">🔄 Vymazať</button>
+
+            <!-- Režim výberu -->
+            <h3>3️⃣ Režim výberu:</h3>
+            <div class="option-buttons">
+                <button class="option-btn btn-secondary active" onclick="switchMode('selection')">Výber oblasti</button>
+                <button class="option-btn btn-secondary" onclick="switchMode('element')">Výber prvku</button>
+            </div>
+
+            <div class="mode-indicator" id="modeIndicator">
+                ⚠️ Režim: <strong id="modeText">Výber oblasti</strong> - Klikni a potiahuť myšu
+            </div>
+
+            <div class="coords-display" id="coordsDisplay"></div>
+
+            <!-- Možnosti exportu -->
+            <h3>4️⃣ Export:</h3>
+            <div class="checkbox-group">
+                <input type="checkbox" id="includeBackground" checked>
+                <label for="includeBackground">Vrátane pozadia</label>
+            </div>
+
+            <div class="control-group">
+                <label>DPI (kvalita):</label>
+                <select id="dpiSelect" style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
+                    <option value="1">Štandardne (1x)</option>
+                    <option value="2" selected>Vysoká kvalita (2x)</option>
+                    <option value="3">Veľmi vysoká (3x)</option>
+                    <option value="4">Ultra vysoká (4x)</option>
+                </select>
+            </div>
+
+            <button class="btn-warning" id="downloadBtn" onclick="downloadScreenshot()" disabled>⬇️ Stiahnuť ako PNG</button>
+
+            <hr style="margin: 20px 0; border: none; border-top: 1px solid #eee;">
+
+            <h3>ℹ️ Návod:</h3>
+            <p style="font-size: 12px; color: #666; line-height: 1.6;">
+                1. Nahraj HTML súbor<br>
+                2. Vyber režim (oblasť/prvok)<br>
+                3. Klikni a potiahuť na stránku<br>
+                4. Stiahnuť vybranú časť
+            </p>
+        </div>
+
+        <!-- Panel s náhľadom -->
+        <div class="panel preview-panel">
+            <div class="preview-frame" id="previewFrame">
+                <div id="htmlPreview">
+                    <p style="color: #999; text-align: center; padding: 40px;">
+                        Nahraj HTML súbor alebo vlož kód...
+                    </p>
+                </div>
+            </div>
+            <div class="selection-overlay" id="selectionOverlay"></div>
+            <div class="selection-info" id="selectionInfo"></div>
+        </div>
+    </div>
+
+    <script>
+        let currentMode = 'selection';
+        let isSelecting = false;
+        let selectionStart = null;
+        let selectedElement = null;
+
+        // Nahrávanie HTML zo súboru
+        document.getElementById('htmlFile').addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = function(event) {
+                    document.getElementById('htmlCode').value = event.target.result;
+                    loadHtmlFromText();
+                };
+                reader.readAsText(file);
+            }
+        });
+
+        // Načítanie HTML z textu
+        window.loadHtmlFromText = function() {
+            const htmlCode = document.getElementById('htmlCode').value;
+            if (!htmlCode.trim()) {
+                alert('Vlož HTML kód!');
+                return;
+            }
+
+            try {
+                const preview = document.getElementById('htmlPreview');
+                preview.innerHTML = htmlCode;
+
+                // Načítaj CSS a JS z obsahu ak existujú
+                const scripts = preview.querySelectorAll('script');
+                scripts.forEach(script => {
+                    if (script.textContent) {
+                        eval(script.textContent);
+                    }
+                });
+
+                updateStatus('HTML nahraný! Vyber časť na screenshotnutie...');
+                document.getElementById('downloadBtn').disabled = false;
+                document.getElementById('modeIndicator').classList.add('active');
+
+                setupSelectionListeners();
+            } catch (error) {
+                alert('Chyba pri načítaní HTML: ' + error.message);
+            }
+        };
+
+        // Zmena režimu
+        window.switchMode = function(mode) {
+            currentMode = mode;
+            document.querySelectorAll('.option-btn').forEach(btn => btn.classList.remove('active'));
+            event.target.classList.add('active');
+
+            const modeText = mode === 'selection' ? 'Výber oblasti' : 'Výber prvku (hover)';
+            document.getElementById('modeText').textContent = modeText;
+
+            selectedElement = null;
+            resetSelection();
+        };
+
+        // Nastavenie poslucháčov pre výber
+        function setupSelectionListeners() {
+            const preview = document.getElementById('htmlPreview');
+            const overlay = document.getElementById('selectionOverlay');
+            const frame = document.getElementById('previewFrame');
+
+            frame.addEventListener('mousedown', startSelection);
+            frame.addEventListener('mousemove', updateSelection);
+            frame.addEventListener('mouseup', endSelection);
+            frame.addEventListener('mouseleave', endSelection);
+
+            if (currentMode === 'element') {
+                preview.addEventListener('mouseover', highlightElement);
+                preview.addEventListener('click', selectElement);
+            }
+        }
+
+        function startSelection(e) {
+            if (currentMode !== 'selection') return;
+            if (e.target.id === 'htmlPreview') return;
+
+            isSelecting = true;
+            const frame = document.getElementById('previewFrame');
+            selectionStart = {
+                x: e.clientX - frame.getBoundingClientRect().left,
+                y: e.clientY - frame.getBoundingClientRect().top
+            };
+        }
+
+        function updateSelection(e) {
+            if (!isSelecting || currentMode !== 'selection') return;
+
+            const frame = document.getElementById('previewFrame');
+            const overlay = document.getElementById('selectionOverlay');
+            const info = document.getElementById('selectionInfo');
+
+            const current = {
+                x: e.clientX - frame.getBoundingClientRect().left,
+                y: e.clientY - frame.getBoundingClientRect().top
+            };
+
+            const x = Math.min(selectionStart.x, current.x);
+            const y = Math.min(selectionStart.y, current.y);
+            const width = Math.abs(current.x - selectionStart.x);
+            const height = Math.abs(current.y - selectionStart.y);
+
+            overlay.style.display = 'block';
+            overlay.style.left = x + 'px';
+            overlay.style.top = y + 'px';
+            overlay.style.width = width + 'px';
+            overlay.style.height = height + 'px';
+
+            info.style.display = 'block';
+            info.style.left = (x + 10) + 'px';
+            info.style.top = (y - 30) + 'px';
+            info.textContent = `${Math.round(width)}x${Math.round(height)}px`;
+
+            document.getElementById('coordsDisplay').classList.add('active');
+            document.getElementById('coordsDisplay').innerHTML = `
+                X: ${Math.round(x)}px | Y: ${Math.round(y)}px<br>
+                Šírka: ${Math.round(width)}px | Výška: ${Math.round(height)}px
+            `;
+        }
+
+        function endSelection(e) {
+            isSelecting = false;
+        }
+
+        function highlightElement(e) {
+            if (currentMode !== 'element' || e.target.id === 'htmlPreview') return;
+            e.target.style.outline = '2px dashed #2196F3';
+            e.target.style.outlineOffset = '2px';
+        }
+
+        function selectElement(e) {
+            if (currentMode !== 'element') return;
+            e.preventDefault();
+            e.stopPropagation();
+
+            if (selectedElement) {
+                selectedElement.style.outline = '';
+                selectedElement.style.outlineOffset = '';
+            }
+
+            selectedElement = e.target;
+            selectedElement.style.outline = '3px solid #2196F3';
+            selectedElement.style.outlineOffset = '2px';
+
+            const rect = selectedElement.getBoundingClientRect();
+            document.getElementById('coordsDisplay').classList.add('active');
+            document.getElementById('coordsDisplay').innerHTML = `
+                Vybraný prvok: <strong>${selectedElement.tagName}</strong><br>
+                Šírka: ${Math.round(rect.width)}px | Výška: ${Math.round(rect.height)}px
+            `;
+
+            updateStatus('Prvok vybraný! Klikni na Stiahnuť...');
+        }
+
+        function resetSelection() {
+            const overlay = document.getElementById('selectionOverlay');
+            const info = document.getElementById('selectionInfo');
+            overlay.style.display = 'none';
+            info.style.display = 'none';
+            document.getElementById('coordsDisplay').classList.remove('active');
+        }
+
+        // Download screenshot
+        window.downloadScreenshot = async function() {
+            if (!document.getElementById('htmlCode').value.trim()) {
+                alert('Nahraj HTML najprv!');
+                return;
+            }
+
+            const dpi = parseInt(document.getElementById('dpiSelect').value);
+            const overlay = document.getElementById('selectionOverlay');
+            const preview = document.getElementById('htmlPreview');
+
+            let captureElement = preview;
+            let captureOptions = {
+                scale: dpi,
+                backgroundColor: '#ffffff',
+                allowTaint: true,
+                useCORS: true
+            };
+
+            if (currentMode === 'selection' && overlay.style.display !== 'none') {
+                // Výber obsahu z overlay
+                const rect = overlay.getBoundingClientRect();
+                const frameRect = document.getElementById('previewFrame').getBoundingClientRect();
+
+                const x = rect.left - frameRect.left + document.getElementById('previewFrame').scrollLeft;
+                const y = rect.top - frameRect.top + document.getElementById('previewFrame').scrollTop;
+
+                captureOptions.x = Math.round(x);
+                captureOptions.y = Math.round(y);
+                captureOptions.width = Math.round(rect.width);
+                captureOptions.height = Math.round(rect.height);
+            } else if (currentMode === 'element' && selectedElement) {
+                captureElement = selectedElement;
+            }
+
+            try {
+                updateStatus('⏳ Generujem screenshot...');
+                const canvas = await html2canvas(captureElement, captureOptions);
+
+                // Stiahnuť
+                const link = document.createElement('a');
+                link.href = canvas.toDataURL('image/png');
+                link.download = `screenshot_${new Date().getTime()}.png`;
+                link.click();
+
+                updateStatus('✅ Screenshot stiahnutý!');
+            } catch (error) {
+                updateStatus('❌ Chyba: ' + error.message);
+                console.error(error);
+            }
+        };
+
+        // Vymazať
+        window.resetHtml = function() {
+            document.getElementById('htmlCode').value = '';
+            document.getElementById('htmlFile').value = '';
+            document.getElementById('htmlPreview').innerHTML = '<p style="color: #999; text-align: center; padding: 40px;">Nahraj HTML súbor alebo vlož kód...</p>';
+            document.getElementById('downloadBtn').disabled = true;
+            document.getElementById('modeIndicator').classList.remove('active');
+            resetSelection();
+            updateStatus('Zmazané. Nahraj nový HTML...');
+        };
+
+        function updateStatus(message) {
+            document.getElementById('status').textContent = message;
+        }
+    </script>
+</body>
+</html>
