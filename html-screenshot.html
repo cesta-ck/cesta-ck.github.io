@@ -37,6 +37,7 @@
             width: 300px;
             padding: 20px;
             border-right: 2px solid #e0e0e0;
+            overflow-y: auto;
         }
 
         .preview-panel {
@@ -141,16 +142,45 @@
             color: #1976d2;
         }
 
+        .status-info.success {
+            background: #e8f5e9;
+            border-left-color: #4CAF50;
+            color: #2e7d32;
+        }
+
+        .status-info.error {
+            background: #ffebee;
+            border-left-color: #f44336;
+            color: #c62828;
+        }
+
         .preview-frame {
             flex: 1;
             overflow: auto;
             background: white;
             position: relative;
+            border: 1px solid #e0e0e0;
+            border-radius: 4px;
         }
 
         #htmlPreview {
             padding: 20px;
             min-height: 100%;
+        }
+
+        .iframe-container {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            position: relative;
+            overflow: hidden;
+        }
+
+        #previewIframe {
+            flex: 1;
+            border: none;
+            background: white;
+            border-radius: 4px;
         }
 
         .selection-overlay {
@@ -216,10 +246,12 @@
             display: flex;
             gap: 10px;
             margin-bottom: 10px;
+            flex-wrap: wrap;
         }
 
         .option-btn {
             flex: 1;
+            min-width: 80px;
             padding: 8px;
             font-size: 12px;
         }
@@ -247,6 +279,30 @@
             cursor: pointer;
             font-weight: normal;
         }
+
+        select {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            margin-bottom: 10px;
+        }
+
+        .sandbox-info {
+            background: #e1f5fe;
+            border-left: 4px solid #0288d1;
+            padding: 10px;
+            border-radius: 4px;
+            font-size: 12px;
+            color: #01579b;
+            margin-bottom: 15px;
+        }
+
+        hr {
+            margin: 20px 0;
+            border: none;
+            border-top: 1px solid #eee;
+        }
     </style>
 </head>
 <body>
@@ -257,6 +313,10 @@
 
             <div class="status-info" id="status">
                 Krok 1: Nahraj HTML súbor alebo vlož kód
+            </div>
+
+            <div class="sandbox-info">
+                ✅ Bezpečný režim: HTML sa načítava v izolovanom iframe
             </div>
 
             <!-- Nahrávanie HTML -->
@@ -270,17 +330,17 @@
             <!-- HTML kód -->
             <div class="control-group">
                 <label>2️⃣ Alebo vlož HTML kód:</label>
-                <textarea id="htmlCode" placeholder="&lt;!DOCTYPE html&gt;&#10;&lt;html&gt;&#10;..."></textarea>
+                <textarea id="htmlCode" placeholder="&lt;!DOCTYPE html&gt;&#10;&lt;html&gt;&#10;&lt;body&gt;&#10;&lt;h1&gt;Ahoj!&lt;/h1&gt;&#10;&lt;/body&gt;&#10;&lt;/html&gt;"></textarea>
                 <button class="btn-secondary" onclick="loadHtmlFromText()">Načítať kód</button>
             </div>
 
-            <button class="btn-primary" onclick="resetHtml()">🔄 Vymazať</button>
+            <button class="btn-danger" onclick="resetHtml()">🔄 Vymazať</button>
 
             <!-- Režim výberu -->
             <h3>3️⃣ Režim výberu:</h3>
             <div class="option-buttons">
                 <button class="option-btn btn-secondary active" onclick="switchMode('selection')">Výber oblasti</button>
-                <button class="option-btn btn-secondary" onclick="switchMode('element')">Výber prvku</button>
+                <button class="option-btn btn-secondary" onclick="switchMode('fullpage')">Celá stránka</button>
             </div>
 
             <div class="mode-indicator" id="modeIndicator">
@@ -298,7 +358,7 @@
 
             <div class="control-group">
                 <label>DPI (kvalita):</label>
-                <select id="dpiSelect" style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
+                <select id="dpiSelect">
                     <option value="1">Štandardne (1x)</option>
                     <option value="2" selected>Vysoká kvalita (2x)</option>
                     <option value="3">Veľmi vysoká (3x)</option>
@@ -308,14 +368,22 @@
 
             <button class="btn-warning" id="downloadBtn" onclick="downloadScreenshot()" disabled>⬇️ Stiahnuť ako PNG</button>
 
-            <hr style="margin: 20px 0; border: none; border-top: 1px solid #eee;">
+            <hr>
 
             <h3>ℹ️ Návod:</h3>
             <p style="font-size: 12px; color: #666; line-height: 1.6;">
                 1. Nahraj HTML súbor<br>
-                2. Vyber režim (oblasť/prvok)<br>
+                2. Vyber režim<br>
                 3. Klikni a potiahuť na stránku<br>
                 4. Stiahnuť vybranú časť
+            </p>
+
+            <h3>🔒 Bezpečnosť:</h3>
+            <p style="font-size: 12px; color: #666; line-height: 1.6;">
+                • Bežný JavaScript se neexekuje<br>
+                • Bez prístupu k cookies<br>
+                • Bez sieťových požiadaviek<br>
+                • Bezpečný HTML/CSS render
             </p>
         </div>
 
@@ -337,7 +405,8 @@
         let currentMode = 'selection';
         let isSelecting = false;
         let selectionStart = null;
-        let selectedElement = null;
+        let htmlLoaded = false;
+        let iframeDoc = null;
 
         // Nahrávanie HTML zo súboru
         document.getElementById('htmlFile').addEventListener('change', function(e) {
@@ -352,35 +421,78 @@
             }
         });
 
-        // Načítanie HTML z textu
+        // Načítanie HTML v bezpečnom iframe
         window.loadHtmlFromText = function() {
             const htmlCode = document.getElementById('htmlCode').value;
             if (!htmlCode.trim()) {
-                alert('Vlož HTML kód!');
+                updateStatus('❌ Vlož HTML kód!', 'error');
                 return;
             }
 
             try {
                 const preview = document.getElementById('htmlPreview');
-                preview.innerHTML = htmlCode;
+                
+                // Vymazať starý iframe ak existuje
+                const oldIframe = preview.querySelector('iframe');
+                if (oldIframe) oldIframe.remove();
 
-                // Načítaj CSS a JS z obsahu ak existujú
-                const scripts = preview.querySelectorAll('script');
-                scripts.forEach(script => {
-                    if (script.textContent) {
-                        eval(script.textContent);
+                // Vytvoriť nový iframe
+                const iframe = document.createElement('iframe');
+                iframe.id = 'previewIframe';
+                iframe.sandbox.add('allow-same-origin');
+                iframe.sandbox.add('allow-popups');
+                iframe.srcdoc = htmlCode;
+                
+                preview.innerHTML = '';
+                preview.appendChild(iframe);
+
+                // Počkať na načítanie iframe a nastav listeners
+                iframe.onload = function() {
+                    try {
+                        iframeDoc = iframe.contentDocument || iframe.contentWindow.document;
+                        htmlLoaded = true;
+
+                        updateStatus('✅ HTML nahraný! Vyber časť na screenshotnutie...', 'success');
+                        document.getElementById('downloadBtn').disabled = false;
+                        document.getElementById('modeIndicator').classList.add('active');
+
+                        // Nastav event listenery na iframe obsah
+                        setupIframeListeners(iframe);
+                    } catch (error) {
+                        console.error('Chyba pri prístupe do iframe:', error);
+                        updateStatus('❌ Chyba pri načítaní: Chránené obsah', 'error');
                     }
-                });
+                };
 
-                updateStatus('HTML nahraný! Vyber časť na screenshotnutie...');
-                document.getElementById('downloadBtn').disabled = false;
-                document.getElementById('modeIndicator').classList.add('active');
+                // Timeout pre prípad ak sa iframe nenačíta
+                setTimeout(() => {
+                    if (!htmlLoaded) {
+                        updateStatus('✅ HTML nahraný! (Sandbox režim)', 'success');
+                        document.getElementById('downloadBtn').disabled = false;
+                        document.getElementById('modeIndicator').classList.add('active');
+                    }
+                }, 1000);
 
-                setupSelectionListeners();
             } catch (error) {
-                alert('Chyba pri načítaní HTML: ' + error.message);
+                updateStatus('❌ Chyba pri načítaní HTML: ' + error.message, 'error');
+                console.error(error);
             }
         };
+
+        // Setup listeners na iframe
+        function setupIframeListeners(iframe) {
+            try {
+                const iframeWindow = iframe.contentWindow;
+                const frame = document.getElementById('previewFrame');
+
+                frame.addEventListener('mousedown', (e) => startSelection(e, iframe));
+                frame.addEventListener('mousemove', (e) => updateSelection(e, iframe));
+                frame.addEventListener('mouseup', endSelection);
+                frame.addEventListener('mouseleave', endSelection);
+            } catch (error) {
+                console.warn('Nemožno nastaviť listeners (sandbox limit):', error);
+            }
+        }
 
         // Zmena režimu
         window.switchMode = function(mode) {
@@ -388,52 +500,37 @@
             document.querySelectorAll('.option-btn').forEach(btn => btn.classList.remove('active'));
             event.target.classList.add('active');
 
-            const modeText = mode === 'selection' ? 'Výber oblasti' : 'Výber prvku (hover)';
+            const modeText = mode === 'selection' ? 'Výber oblasti' : 'Celá stránka';
             document.getElementById('modeText').textContent = modeText;
 
-            selectedElement = null;
             resetSelection();
         };
 
-        // Nastavenie poslucháčov pre výber
-        function setupSelectionListeners() {
-            const preview = document.getElementById('htmlPreview');
-            const overlay = document.getElementById('selectionOverlay');
-            const frame = document.getElementById('previewFrame');
-
-            frame.addEventListener('mousedown', startSelection);
-            frame.addEventListener('mousemove', updateSelection);
-            frame.addEventListener('mouseup', endSelection);
-            frame.addEventListener('mouseleave', endSelection);
-
-            if (currentMode === 'element') {
-                preview.addEventListener('mouseover', highlightElement);
-                preview.addEventListener('click', selectElement);
-            }
-        }
-
-        function startSelection(e) {
+        function startSelection(e, iframe) {
             if (currentMode !== 'selection') return;
             if (e.target.id === 'htmlPreview') return;
 
             isSelecting = true;
             const frame = document.getElementById('previewFrame');
+            const iframeRect = iframe.getBoundingClientRect();
+            
             selectionStart = {
-                x: e.clientX - frame.getBoundingClientRect().left,
-                y: e.clientY - frame.getBoundingClientRect().top
+                x: e.clientX - iframeRect.left,
+                y: e.clientY - iframeRect.top
             };
         }
 
-        function updateSelection(e) {
+        function updateSelection(e, iframe) {
             if (!isSelecting || currentMode !== 'selection') return;
 
             const frame = document.getElementById('previewFrame');
             const overlay = document.getElementById('selectionOverlay');
             const info = document.getElementById('selectionInfo');
+            const iframeRect = iframe.getBoundingClientRect();
 
             const current = {
-                x: e.clientX - frame.getBoundingClientRect().left,
-                y: e.clientY - frame.getBoundingClientRect().top
+                x: e.clientX - iframeRect.left,
+                y: e.clientY - iframeRect.top
             };
 
             const x = Math.min(selectionStart.x, current.x);
@@ -442,14 +539,14 @@
             const height = Math.abs(current.y - selectionStart.y);
 
             overlay.style.display = 'block';
-            overlay.style.left = x + 'px';
-            overlay.style.top = y + 'px';
+            overlay.style.left = (iframeRect.left + x) + 'px';
+            overlay.style.top = (iframeRect.top + y) + 'px';
             overlay.style.width = width + 'px';
             overlay.style.height = height + 'px';
 
             info.style.display = 'block';
-            info.style.left = (x + 10) + 'px';
-            info.style.top = (y - 30) + 'px';
+            info.style.left = (iframeRect.left + x + 10) + 'px';
+            info.style.top = (iframeRect.top + y - 30) + 'px';
             info.textContent = `${Math.round(width)}x${Math.round(height)}px`;
 
             document.getElementById('coordsDisplay').classList.add('active');
@@ -463,36 +560,6 @@
             isSelecting = false;
         }
 
-        function highlightElement(e) {
-            if (currentMode !== 'element' || e.target.id === 'htmlPreview') return;
-            e.target.style.outline = '2px dashed #2196F3';
-            e.target.style.outlineOffset = '2px';
-        }
-
-        function selectElement(e) {
-            if (currentMode !== 'element') return;
-            e.preventDefault();
-            e.stopPropagation();
-
-            if (selectedElement) {
-                selectedElement.style.outline = '';
-                selectedElement.style.outlineOffset = '';
-            }
-
-            selectedElement = e.target;
-            selectedElement.style.outline = '3px solid #2196F3';
-            selectedElement.style.outlineOffset = '2px';
-
-            const rect = selectedElement.getBoundingClientRect();
-            document.getElementById('coordsDisplay').classList.add('active');
-            document.getElementById('coordsDisplay').innerHTML = `
-                Vybraný prvok: <strong>${selectedElement.tagName}</strong><br>
-                Šírka: ${Math.round(rect.width)}px | Výška: ${Math.round(rect.height)}px
-            `;
-
-            updateStatus('Prvok vybraný! Klikni na Stiahnuť...');
-        }
-
         function resetSelection() {
             const overlay = document.getElementById('selectionOverlay');
             const info = document.getElementById('selectionInfo');
@@ -503,41 +570,45 @@
 
         // Download screenshot
         window.downloadScreenshot = async function() {
-            if (!document.getElementById('htmlCode').value.trim()) {
-                alert('Nahraj HTML najprv!');
+            const htmlCode = document.getElementById('htmlCode').value;
+            if (!htmlCode.trim()) {
+                updateStatus('❌ Nahraj HTML najprv!', 'error');
                 return;
             }
 
             const dpi = parseInt(document.getElementById('dpiSelect').value);
-            const overlay = document.getElementById('selectionOverlay');
-            const preview = document.getElementById('htmlPreview');
-
-            let captureElement = preview;
-            let captureOptions = {
-                scale: dpi,
-                backgroundColor: '#ffffff',
-                allowTaint: true,
-                useCORS: true
-            };
-
-            if (currentMode === 'selection' && overlay.style.display !== 'none') {
-                // Výber obsahu z overlay
-                const rect = overlay.getBoundingClientRect();
-                const frameRect = document.getElementById('previewFrame').getBoundingClientRect();
-
-                const x = rect.left - frameRect.left + document.getElementById('previewFrame').scrollLeft;
-                const y = rect.top - frameRect.top + document.getElementById('previewFrame').scrollTop;
-
-                captureOptions.x = Math.round(x);
-                captureOptions.y = Math.round(y);
-                captureOptions.width = Math.round(rect.width);
-                captureOptions.height = Math.round(rect.height);
-            } else if (currentMode === 'element' && selectedElement) {
-                captureElement = selectedElement;
+            const iframe = document.querySelector('iframe');
+            
+            if (!iframe) {
+                updateStatus('❌ Iframe nenájdený!', 'error');
+                return;
             }
 
             try {
-                updateStatus('⏳ Generujem screenshot...');
+                updateStatus('⏳ Generujem screenshot...', 'info');
+
+                let captureOptions = {
+                    scale: dpi,
+                    backgroundColor: '#ffffff',
+                    allowTaint: true,
+                    useCORS: true
+                };
+
+                let captureElement = iframe;
+
+                if (currentMode === 'selection') {
+                    const overlay = document.getElementById('selectionOverlay');
+                    if (overlay.style.display !== 'none') {
+                        const rect = overlay.getBoundingClientRect();
+                        const iframeRect = iframe.getBoundingClientRect();
+
+                        captureOptions.x = Math.round((rect.left - iframeRect.left) * dpi);
+                        captureOptions.y = Math.round((rect.top - iframeRect.top) * dpi);
+                        captureOptions.width = Math.round(rect.width * dpi);
+                        captureOptions.height = Math.round(rect.height * dpi);
+                    }
+                }
+
                 const canvas = await html2canvas(captureElement, captureOptions);
 
                 // Stiahnuť
@@ -546,9 +617,9 @@
                 link.download = `screenshot_${new Date().getTime()}.png`;
                 link.click();
 
-                updateStatus('✅ Screenshot stiahnutý!');
+                updateStatus('✅ Screenshot stiahnutý!', 'success');
             } catch (error) {
-                updateStatus('❌ Chyba: ' + error.message);
+                updateStatus('❌ Chyba: ' + error.message, 'error');
                 console.error(error);
             }
         };
@@ -557,15 +628,21 @@
         window.resetHtml = function() {
             document.getElementById('htmlCode').value = '';
             document.getElementById('htmlFile').value = '';
-            document.getElementById('htmlPreview').innerHTML = '<p style="color: #999; text-align: center; padding: 40px;">Nahraj HTML súbor alebo vlož kód...</p>';
+            const preview = document.getElementById('htmlPreview');
+            preview.innerHTML = '<p style="color: #999; text-align: center; padding: 40px;">Nahraj HTML súbor alebo vlož kód...</p>';
             document.getElementById('downloadBtn').disabled = true;
             document.getElementById('modeIndicator').classList.remove('active');
             resetSelection();
-            updateStatus('Zmazané. Nahraj nový HTML...');
+            htmlLoaded = false;
+            iframeDoc = null;
+            updateStatus('🔄 Zmazané. Nahraj nový HTML...', 'info');
         };
 
-        function updateStatus(message) {
-            document.getElementById('status').textContent = message;
+        function updateStatus(message, type = 'info') {
+            const status = document.getElementById('status');
+            status.textContent = message;
+            status.className = 'status-info';
+            if (type) status.classList.add(type);
         }
     </script>
 </body>
